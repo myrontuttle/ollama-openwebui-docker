@@ -1,15 +1,20 @@
 services:
   ollama:
-    image: ollama/ollama:latest
-    #### uncomment the following line to use the GPU
-    # deploy:
-    #   replicas: 1
-    #   resources:
-    #     reservations:
-    #       devices:
-    #         - driver: nvidia
-    #           count: all
-    #           capabilities: [gpu]
+    image: docker.io/ollama/ollama:latest
+    container_name: ollama
+    ports:
+      - "11434:11434"  # Ollama API port
+    environment:
+      - OLLAMA_KEEP_ALIVE=24h
+    #Use the GPU
+    deploy:
+      replicas: 1
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
     healthcheck:
       test: timeout 5 bash -c "</dev/tcp/localhost/11434"
       interval: 10s
@@ -22,18 +27,11 @@ services:
     networks:
       default:
 
-  searxng:
-    image: searxng/searxng:latest
-    volumes:
-      - ./searxng:/etc/searxng
-    restart: unless-stopped
-    networks:
-      default:
-
   open-webui:
     image: ghcr.io/open-webui/open-webui:${WEBUI_DOCKER_TAG-main}
+    container_name: open-webui
     ports:
-      - "8080:8080"
+      - "8082:8080"
     depends_on:
       postgres:
         condition: service_healthy
@@ -42,6 +40,7 @@ services:
     environment:
       ## Ollama
       - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://ollama:11434}
+      # OLLAMA_BASE_URL=http://host.docker.internal:11434
 
       ## Searxng
       - ENABLE_RAG_WEB_SEARCH=true
@@ -53,12 +52,22 @@ services:
       ## Web
       - OAUTH_MERGE_ACCOUNTS_BY_EMAIL=${OAUTH_MERGE_ACCOUNTS_BY_EMAIL:-false}
       - WEBUI_SECRET_KEY=${WEBUI_SECRET_KEY:-secret}
-      - USE_CUDA_DOCKER=${USE_CUDA_DOCKER:-false}
+      - USE_CUDA_DOCKER=${USE_CUDA_DOCKER:-true}
       - DATABASE_URL=${DATABASE_URL}
-
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     restart: unless-stopped
     volumes:
       - open_webui:/app/backend/data
+    networks:
+      default:
+
+  # Searxng is a privacy-respecting, hackable metasearch engine
+  searxng:
+    image: searxng/searxng:latest
+    volumes:
+      - ./searxng:/etc/searxng
+    restart: unless-stopped
     networks:
       default:
 
